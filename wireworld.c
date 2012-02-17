@@ -9,7 +9,7 @@
 enum {
 	WIDTH = 1024,
 	HEIGHT = 1024,
-	THREADS = 2
+	THREADS = 4
 };
 
 static SDL_Surface *screen;
@@ -76,7 +76,6 @@ static void process(int x, int y, int nz) {
 	}
 }
 
-
 static int thread_func(void *data) {
 	unsigned *range;
 	unsigned x, y;
@@ -98,27 +97,29 @@ static unsigned range[THREADS][2];
 
 static void evolve(void) {
 	unsigned x, y, i;
-	SDL_Thread *t[2];
+	SDL_Thread *t[THREADS];
 
 	range[0][0] = 0;
 	for(i = 0; i < THREADS - 1; i++) {
 		range[i][1] = range[i][0] + h / THREADS - 1;
-		range[i + 1][0] = range[i][1] + 1;
+		y = range[i][1];
+		for(x = start[y]; x < end[y]; x++)
+			neighbors[!z][y][x] = 0;
+		range[i + 1][0] = y + 1;
 	}
 	range[i][1] = h;
 
-	y = h / 2 - 1;
-	for(x = start[y]; x < end[y]; x++)
-		neighbors[!z][y][x] = 0;
-
-	for(i = 0; i < 2; i++)
+	for(i = 0; i < THREADS; i++)
 		t[i] = SDL_CreateThread(thread_func, &range[i]);
 
-	for(i = 0; i < 2; i++)
+	for(i = 0; i < THREADS; i++)
 		SDL_WaitThread(t[i], NULL);
 
-	for(x = start[y]; x < end[y]; x++)
-		process(x, y, !z);
+	for(i = 0; i < THREADS - 1; i++) {
+		y = range[i][1];
+		for(x = start[y]; x < end[y]; x++)
+			process(x, y, !z);
+	}
 
 	z = !z;
 }
@@ -162,10 +163,16 @@ int main(int argc, char *argv[]) {
 		evolve();
 		evolve();
 		evolve();
+		evolve();
+		evolve();
+		evolve();
+		evolve();
+		evolve();
+		evolve();
 		draw();
 		frames++;
 		SDL_Flip(screen);
 	} while(!SDL_PollEvent(&event) || event.type != SDL_QUIT);
-	printf("%f\n", (double)SDL_GetTicks() / frames);
+	printf("%f\n", (double)frames / SDL_GetTicks());
 	return 0;
 }
