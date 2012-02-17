@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
@@ -13,31 +14,20 @@ enum {
 
 static SDL_Surface *screen;
 static char map[2][HEIGHT + 2][WIDTH + 2];
-static int neighbors[2][HEIGHT + 2][WIDTH + 2];
+static char neighbors[2][HEIGHT + 2][WIDTH + 2];
+static int start[HEIGHT], end[HEIGHT];
 
 static int h, w, z;
 
-static int neigh(int x, int y) {
-	int n, i, j;
-
-	n = 0;
-
-	for(i = -1; i <= 1; i++)
-		for(j = -1; j <= 1; j++)
-			if(map[z][y+i][x+j] == '@')
-				n++;
-	return n == 1 || n == 2;
-}
-
-static void count(int z, int x, int y) {
-	neighbors[z][y-1][x-1]++;
-	neighbors[z][y-1][x]++;
-	neighbors[z][y-1][x+1]++;
-	neighbors[z][y][x-1]++;
-	neighbors[z][y][x+1]++;
-	neighbors[z][y+1][x-1]++;
-	neighbors[z][y+1][x]++;
-	neighbors[z][y+1][x+1]++;
+static void count(int x, int y, int nz) {
+	neighbors[nz][y-1][x-1]++;
+	neighbors[nz][y-1][x]++;
+	neighbors[nz][y-1][x+1]++;
+	neighbors[nz][y][x-1]++;
+	neighbors[nz][y][x+1]++;
+	neighbors[nz][y+1][x-1]++;
+	neighbors[nz][y+1][x]++;
+	neighbors[nz][y+1][x+1]++;
 }
 
 static void scanmap(char *path) {
@@ -45,8 +35,6 @@ static void scanmap(char *path) {
 	int x, y;
 
 	memset(map, ' ', sizeof map);
-	memset(neighbors, 0, sizeof neighbors);
-
 	f = fopen(path, "r");
 	if(f == NULL)
 		err(1, "fopen");
@@ -55,14 +43,22 @@ static void scanmap(char *path) {
 
 	while(fgets(map[0][h] + 1, WIDTH, f) != NULL && h < HEIGHT)
 		h++;
-	w = strlen(map[0][0] + 1);
+	w = strlen(map[0][1] + 1);
 	fclose(f);
 
-	z = 0;
-	for(y = 1; y < h; y++)
-		for(x = 1; x < w; x++)
+	for(y = 1; y < h; y++) {
+		start[y] = w;
+		end[y] = 0;
+		for(x = 1; x < w; x++) {
+			if(map[0][y][x] != ' ') {
+				if(start[y] > x)
+					start[y] = x;
+				end[y] = x + 1;
+			}
 			if(map[0][y][x] == '@')
-				count(0, x, y);
+				count(x, y, 0);
+		}
+	}
 }
 
 static void draw(void) {
@@ -70,7 +66,7 @@ static void draw(void) {
 
 	SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
 	for(y = 1; y < h; y++)
-		for(x = 1; x < w; x++)
+		for(x = start[y]; x < end[y]; x++)
 			switch(map[z][y][x]) {
 			case '@':
 				pixelColor(screen, x, y, 0x0000ffff); 
@@ -88,11 +84,13 @@ static void evolve(void) {
 	int nz, x, y;
 
 	nz = (z + 1) % 2;
+
 	for(y = 1; y < h; y++)
-		for(x = 1; x < w; x++)
+		for(x = start[y]; x < end[y]; x++)
 			neighbors[nz][y][x] = 0;
+
 	for(y = 1; y < h; y++)
-		for(x = 1; x < w; x++)
+		for(x = start[y]; x < end[y]; x++)
 			switch(map[z][y][x]) {
 			case '@':
 				map[nz][y][x] = '~';
@@ -101,12 +99,13 @@ static void evolve(void) {
 				map[nz][y][x] = '#';
 				break;
 			case '#':
-				if(neigh(x, y)) {
+				if(neighbors[z][y][x] == 1 || neighbors[z][y][x] == 2) {
 					map[nz][y][x] = '@';
-					count(nz, x, y);
+					count(x, y, nz);
 				} else
 					map[nz][y][x] = '#';
 			}
+
 	z = nz;
 }
 
@@ -119,7 +118,7 @@ int main(int argc, char *argv[]) {
 
 	atexit(SDL_Quit);
 
-	screen = SDL_SetVideoMode(WIDTH, HEIGHT, 0, SDL_HWSURFACE | SDL_DOUBLEBUF);
+	screen = SDL_SetVideoMode(w, h, 0, SDL_HWSURFACE | SDL_DOUBLEBUF);
 	if(screen == NULL)
 		errx(1, "Unable to set video: %s\n", SDL_GetError());
 
