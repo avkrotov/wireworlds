@@ -8,7 +8,8 @@
 
 enum {
 	WIDTH = 1024,
-	HEIGHT = 1024
+	HEIGHT = 1024,
+	THREADS = 2
 };
 
 static SDL_Surface *screen;
@@ -84,27 +85,31 @@ static int thread_func(void *data) {
 
 	for(y = range[0]; y < range[1]; y++)
 		for(x = start[y]; x < end[y]; x++)
+			neighbors[!z][y][x] = 0;
+
+	for(y = range[0]; y < range[1]; y++)
+		for(x = start[y]; x < end[y]; x++)
 			process(x, y, !z);
 	
 	return 0;
 }
 
-static unsigned range[2][2];
+static unsigned range[THREADS][2];
 
 static void evolve(void) {
-	unsigned nz, x, y, i;
+	unsigned x, y, i;
 	SDL_Thread *t[2];
 
-	nz = !z;
+	range[0][0] = 0;
+	for(i = 0; i < THREADS - 1; i++) {
+		range[i][1] = range[i][0] + h / THREADS - 1;
+		range[i + 1][0] = range[i][1] + 1;
+	}
+	range[i][1] = h;
 
-	for(y = 1; y < h; y++)
-		for(x = start[y]; x < end[y]; x++)
-			neighbors[nz][y][x] = 0;
-
-	range[0][0] = 1;
-	range[0][1] = h / 2 - 1;
-	range[1][0] = h / 2;
-	range[1][1] = h;
+	y = h / 2 - 1;
+	for(x = start[y]; x < end[y]; x++)
+		neighbors[!z][y][x] = 0;
 
 	for(i = 0; i < 2; i++)
 		t[i] = SDL_CreateThread(thread_func, &range[i]);
@@ -112,11 +117,10 @@ static void evolve(void) {
 	for(i = 0; i < 2; i++)
 		SDL_WaitThread(t[i], NULL);
 
-	y = h / 2 - 1;
 	for(x = start[y]; x < end[y]; x++)
-		process(x, y, nz);
+		process(x, y, !z);
 
-	z = nz;
+	z = !z;
 }
 
 static void draw(void) {
