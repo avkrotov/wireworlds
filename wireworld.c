@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
@@ -14,10 +13,8 @@ enum {
 
 static SDL_Surface *screen;
 static char map[2][HEIGHT + 2][WIDTH + 2];
-static char neighbors[2][HEIGHT + 2][WIDTH + 2];
-static int start[HEIGHT], end[HEIGHT];
-
-static int h, w, z;
+static unsigned char neighbors[2][HEIGHT + 2][WIDTH + 2];
+static unsigned h, w, z, start[HEIGHT], end[HEIGHT];
 
 static void count(int x, int y, int nz) {
 	neighbors[nz][y-1][x-1]++;
@@ -32,7 +29,7 @@ static void count(int x, int y, int nz) {
 
 static void scanmap(char *path) {
 	FILE *f;
-	int x, y;
+	unsigned x, y;
 
 	memset(map, ' ', sizeof map);
 	f = fopen(path, "r");
@@ -61,58 +58,91 @@ static void scanmap(char *path) {
 	}
 }
 
-static void draw(void) {
-	int x, y;
-
-	SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 0, 0, 0));
-	for(y = 1; y < h; y++)
-		for(x = start[y]; x < end[y]; x++)
-			switch(map[z][y][x]) {
-			case '@':
-				pixelColor(screen, x, y, 0x0000ffff); 
-				break;
-			case '~':
-				pixelColor(screen, x, y, 0xff0000ff); 
-				break;
-			case '#':
-				pixelColor(screen, x, y, 0xffffffff);
-			}
+static void process(int x, int y, int nz) {
+	switch(map[z][y][x]) {
+	case '@':
+		map[nz][y][x] = '~';
+		break;
+	case '~':
+		map[nz][y][x] = '#';
+		break;
+	case '#':
+		if(neighbors[z][y][x] == 1 || neighbors[z][y][x] == 2) {
+			map[nz][y][x] = '@';
+			count(x, y, nz);
+		} else
+			map[nz][y][x] = '#';
+	}
 }
 
 
-static void evolve(void) {
-	int nz, x, y;
+static int thread_func(void *data) {
+	unsigned *range;
+	unsigned x, y;
 
-	nz = (z + 1) % 2;
+	range = data;
+
+	for(y = range[0]; y < range[1]; y++)
+		for(x = start[y]; x < end[y]; x++)
+			process(x, y, !z);
+	
+	return 0;
+}
+
+static unsigned range[2][2];
+
+static void evolve(void) {
+	unsigned nz, x, y, i;
+	SDL_Thread *t[2];
+
+	nz = !z;
 
 	for(y = 1; y < h; y++)
 		for(x = start[y]; x < end[y]; x++)
 			neighbors[nz][y][x] = 0;
 
-	for(y = 1; y < h; y++)
-		for(x = start[y]; x < end[y]; x++)
-			switch(map[z][y][x]) {
-			case '@':
-				map[nz][y][x] = '~';
-				break;
-			case '~':
-				map[nz][y][x] = '#';
-				break;
-			case '#':
-				if(neighbors[z][y][x] == 1 || neighbors[z][y][x] == 2) {
-					map[nz][y][x] = '@';
-					count(x, y, nz);
-				} else
-					map[nz][y][x] = '#';
-			}
+	range[0][0] = 1;
+	range[0][1] = h / 2 - 1;
+	range[1][0] = h / 2;
+	range[1][1] = h;
+
+	for(i = 0; i < 2; i++)
+		t[i] = SDL_CreateThread(thread_func, &range[i]);
+
+	for(i = 0; i < 2; i++)
+		SDL_WaitThread(t[i], NULL);
+
+	y = h / 2 - 1;
+	for(x = start[y]; x < end[y]; x++)
+		process(x, y, nz);
 
 	z = nz;
 }
 
+static void draw(void) {
+	unsigned x, y;
+
+	for(y = 1; y < h; y++)
+		for(x = start[y]; x < end[y]; x++)
+			switch(map[z][y][x]) {
+			case '@':
+				pixelColor(screen, x, y, 0xff00ffff); 
+				break;
+			case '~':
+				pixelColor(screen, x, y, 0xff00ffff); 
+				break;
+			case '#':
+				pixelColor(screen, x, y, 0x0f0fffff);
+			}
+}
+
 int main(int argc, char *argv[]) {
 	SDL_Event event;
+	Uint32 frames;
 
-	scanmap("1.txt");
+	if(argc != 2)
+		return 1;
+	scanmap(argv[1]);
 	if(SDL_Init(SDL_INIT_VIDEO) == -1)
 		errx(1, "SDL_Init: %s", SDL_GetError());
 
@@ -122,12 +152,16 @@ int main(int argc, char *argv[]) {
 	if(screen == NULL)
 		errx(1, "Unable to set video: %s\n", SDL_GetError());
 
-	while(1) {
-		if(SDL_PollEvent(&event) && event.type == SDL_QUIT)
-			exit(0);
+	frames = 0;
 
+	do {
+		evolve();
+		evolve();
 		evolve();
 		draw();
+		frames++;
 		SDL_Flip(screen);
-	} 
+	} while(!SDL_PollEvent(&event) || event.type != SDL_QUIT);
+	printf("%f\n", (double)SDL_GetTicks() / frames);
+	return 0;
 }
