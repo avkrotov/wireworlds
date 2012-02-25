@@ -95,7 +95,7 @@ static int thread_func(void *data) {
 
 static unsigned range[THREADS][2];
 
-static void evolve(void) {
+static void tick(int draw) {
 	unsigned x, y, i;
 	SDL_Thread *t[THREADS];
 
@@ -112,6 +112,20 @@ static void evolve(void) {
 	for(i = 0; i < THREADS; i++)
 		t[i] = SDL_CreateThread(thread_func, &range[i]);
 
+	if(draw)
+		for(y = 1; y < h; y++)
+			for(x = start[y]; x < end[y]; x++)
+				switch(map[z][y][x]) {
+				case '@':
+					pixelColor(screen, x, y, 0xff00ffff); 
+					break;
+				case '~':
+					pixelColor(screen, x, y, 0xff00ffff); 
+					break;
+				case '#':
+					pixelColor(screen, x, y, 0x0f0fffff);
+				}
+
 	for(i = 0; i < THREADS; i++)
 		SDL_WaitThread(t[i], NULL);
 
@@ -122,23 +136,6 @@ static void evolve(void) {
 	}
 
 	z = !z;
-}
-
-static void draw(void) {
-	unsigned x, y;
-
-	for(y = 1; y < h; y++)
-		for(x = start[y]; x < end[y]; x++)
-			switch(map[z][y][x]) {
-			case '@':
-				pixelColor(screen, x, y, 0xff00ffff); 
-				break;
-			case '~':
-				pixelColor(screen, x, y, 0xff00ffff); 
-				break;
-			case '#':
-				pixelColor(screen, x, y, 0x0f0fffff);
-			}
 }
 
 int main(int argc, char *argv[]) {
@@ -160,16 +157,7 @@ int main(int argc, char *argv[]) {
 	frames = 0;
 
 	do {
-		evolve();
-		evolve();
-		evolve();
-		evolve();
-		evolve();
-		evolve();
-		evolve();
-		evolve();
-		evolve();
-		draw();
+		tick(1);
 		frames++;
 		SDL_Flip(screen);
 	} while(!SDL_PollEvent(&event) || event.type != SDL_QUIT);
