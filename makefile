@@ -1,5 +1,5 @@
-CFLAGS = `sdl-config --cflags` -Wall -Wextra -Ofast
-LDFLAGS = `sdl-config --libs` -l SDL_gfx
+CFLAGS = `sdl2-config --cflags` -Wall -Wextra -Ofast
+LDFLAGS = `sdl2-config --libs`
 
 wireworld: wireworld.c
 

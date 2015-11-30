@@ -3,8 +3,7 @@
 #include <string.h>
 #include <err.h>
 
-#include "SDL.h"
-#include "SDL_gfxPrimitives.h" 
+#include <SDL.h>
 
 enum {
 	WIDTH = 1024,
@@ -12,7 +11,8 @@ enum {
 	THREADS = 4
 };
 
-static SDL_Surface *screen;
+static SDL_Window *window;
+static SDL_Renderer *renderer;
 static char map[2][HEIGHT + 2][WIDTH + 2];
 static unsigned char neighbors[2][HEIGHT + 2][WIDTH + 2];
 static unsigned h, w, z, start[HEIGHT], end[HEIGHT];
@@ -110,21 +110,26 @@ static void tick(int draw) {
 	range[i][1] = h;
 
 	for(i = 0; i < THREADS; i++)
-		t[i] = SDL_CreateThread(thread_func, &range[i]);
+		t[i] = SDL_CreateThread(thread_func, "", &range[i]);
 
 	if(draw)
 		for(y = 1; y < h; y++)
-			for(x = start[y]; x < end[y]; x++)
+			for(x = start[y]; x < end[y]; x++) {
 				switch(map[z][y][x]) {
 				case '@':
-					pixelColor(screen, x, y, 0xff00ffff); 
+					SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
 					break;
 				case '~':
-					pixelColor(screen, x, y, 0xff00ffff); 
+					SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
 					break;
 				case '#':
-					pixelColor(screen, x, y, 0x0f0fffff);
+					SDL_SetRenderDrawColor(renderer, 15, 15, 255, 255);
+					break;
+				default:
+					SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 				}
+				SDL_RenderDrawPoint(renderer, x, y);
+			}
 
 	for(i = 0; i < THREADS; i++)
 		SDL_WaitThread(t[i], NULL);
@@ -150,16 +155,17 @@ int main(int argc, char *argv[]) {
 
 	atexit(SDL_Quit);
 
-	screen = SDL_SetVideoMode(w, h, 0, SDL_HWSURFACE | SDL_DOUBLEBUF);
-	if(screen == NULL)
-		errx(1, "Unable to set video: %s\n", SDL_GetError());
+	window = SDL_CreateWindow("Wireworlds", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, w, h, SDL_WINDOW_SHOWN);
+	if(window == NULL)
+		errx(1, "SDL_CreateWindow: %s\n", SDL_GetError());
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
 
 	frames = 0;
 
 	do {
 		tick(1);
 		frames++;
-		SDL_Flip(screen);
+		SDL_RenderPresent(renderer);
 	} while(!SDL_PollEvent(&event) || event.type != SDL_QUIT);
 	printf("%f\n", (double)frames / SDL_GetTicks());
 	return 0;
