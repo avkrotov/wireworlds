@@ -162,6 +162,8 @@ int main(int argc, char *argv[]) {
 
 	frames = 0;
 
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	SDL_RenderClear(renderer);
 	do {
 		tick(1);
 		frames++;
